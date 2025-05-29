@@ -23,8 +23,8 @@ body {
   
   .avatar {
     position: absolute;
-    width: 48px;
-    height: 48px;
+    width: 96px;
+    height: 96px;
     transition: all 0.5s ease;
     border-radius: 50%;
     transform: translate(-50%, -50%);
