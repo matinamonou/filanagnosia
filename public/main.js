@@ -6,6 +6,18 @@ const NUM_AVATARS = 5;
 // Animation state for each avatar
 let avatarStates = [];
 
+// Popup state
+let activePopup = null;
+
+// Avatar information
+const avatarInfo = [
+  { name: "Explorer 1", description: "Wandering through ancient ruins" },
+  { name: "Explorer 2", description: "Searching for hidden treasures" },
+  { name: "Explorer 3", description: "Mapping unknown territories" },
+  { name: "Explorer 4", description: "Studying ancient artifacts" },
+  { name: "Explorer 5", description: "Discovering secret passages" }
+];
+
 // Function to load points from JSON
 async function loadPoints() {
   try {
@@ -21,6 +33,48 @@ async function loadPoints() {
 // Linear interpolation function
 function lerp(start, end, t) {
   return start + (end - start) * t;
+}
+
+// Function to create popup
+function createPopup(avatar, info) {
+  // Remove existing popup if any
+  if (activePopup) {
+    activePopup.remove();
+  }
+
+  const popup = document.createElement('div');
+  popup.className = 'popup';
+  popup.innerHTML = `
+    <button class="popup-close">&times;</button>
+    <div class="popup-title">${info.name}</div>
+    <div class="popup-content">${info.description}</div>
+  `;
+
+  // Position popup above avatar
+  const avatarRect = avatar.getBoundingClientRect();
+  popup.style.left = avatar.style.left;
+  popup.style.top = avatar.style.top;
+
+  // Add close button functionality
+  const closeBtn = popup.querySelector('.popup-close');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    popup.remove();
+    activePopup = null;
+  });
+
+  avatar.parentElement.appendChild(popup);
+  setTimeout(() => popup.classList.add('active'), 10);
+  activePopup = popup;
+
+  // Close popup when clicking outside
+  document.addEventListener('click', function closePopup(e) {
+    if (!popup.contains(e.target) && e.target !== avatar) {
+      popup.remove();
+      activePopup = null;
+      document.removeEventListener('click', closePopup);
+    }
+  });
 }
 
 // Function to create avatars
@@ -53,12 +107,20 @@ function initializeAvatars() {
       currentY: startPoint.y * mapHeight,
       targetX: startPoint.x * mapWidth,
       targetY: startPoint.y * mapHeight,
-      progress: 1, // 1 means movement is complete
-      speed: 0.02 + Math.random() * 0.02 // Random speed between 0.02 and 0.04
+      progress: 1,
+      speed: 0.02 + Math.random() * 0.02,
+      isMoving: false,
+      nextMoveTime: Date.now() + Math.random() * 10000 // Random initial delay
     });
     
     // Set initial position
     updateAvatarPosition(avatar, avatarStates[i].currentX, avatarStates[i].currentY);
+
+    // Add click handler for popup
+    avatar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      createPopup(avatar, avatarInfo[i]);
+    });
   }
 }
 
@@ -74,6 +136,9 @@ function setNewAvatarTarget(avatarState, mapWidth, mapHeight) {
   avatarState.targetX = targetPoint.x * mapWidth;
   avatarState.targetY = targetPoint.y * mapHeight;
   avatarState.progress = 0;
+  avatarState.isMoving = true;
+  // Set next move time to 5-15 seconds after completing this move
+  avatarState.nextMoveTime = Date.now() + 5000 + Math.random() * 10000;
 }
 
 // Function to animate avatars
@@ -81,28 +146,37 @@ function animateAvatars() {
   const map = document.querySelector('.map');
   const mapWidth = map.offsetWidth;
   const mapHeight = map.offsetHeight;
+  const currentTime = Date.now();
 
   avatars.forEach((avatar, index) => {
     const state = avatarStates[index];
     
-    // If movement is complete, set new target
-    if (state.progress >= 1) {
+    // Check if it's time to start moving
+    if (!state.isMoving && currentTime >= state.nextMoveTime) {
       setNewAvatarTarget(state, mapWidth, mapHeight);
     }
-    
-    // Update progress
-    state.progress += state.speed;
-    if (state.progress > 1) state.progress = 1;
-    
-    // Calculate new position
-    state.currentX = lerp(state.currentX, state.targetX, state.progress);
-    state.currentY = lerp(state.currentY, state.targetY, state.progress);
-    
-    // Update avatar position
-    updateAvatarPosition(avatar, state.currentX, state.currentY);
+
+    // Update position if moving
+    if (state.isMoving) {
+      state.progress += state.speed;
+      
+      if (state.progress >= 1) {
+        state.progress = 1;
+        state.isMoving = false;
+      }
+      
+      state.currentX = lerp(state.currentX, state.targetX, state.progress);
+      state.currentY = lerp(state.currentY, state.targetY, state.progress);
+      updateAvatarPosition(avatar, state.currentX, state.currentY);
+
+      // Update popup position if it exists
+      if (activePopup && activePopup.previousSibling === avatar) {
+        activePopup.style.left = avatar.style.left;
+        activePopup.style.top = avatar.style.top;
+      }
+    }
   });
   
-  // Continue animation
   requestAnimationFrame(animateAvatars);
 }
 
@@ -118,7 +192,6 @@ window.addEventListener('resize', () => {
   const mapWidth = map.offsetWidth;
   const mapHeight = map.offsetHeight;
   
-  // Update all avatar positions and targets based on new dimensions
   avatarStates.forEach((state, index) => {
     const currentPoint = {
       x: state.currentX / state.lastMapWidth || mapWidth,
